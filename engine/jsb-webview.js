@@ -34,7 +34,7 @@
 
     cc.WebView.Impl = cc.Class({
         extends: cc.WebView.Impl,
-        ctor () {
+        ctor() {
             // keep webview data
             this.jsCallback = null;
             this.interfaceSchema = null;
@@ -86,7 +86,7 @@
             cc.warn('WebView only supports mobile platform.');
             return;
         }
-        if (!this._iframe){
+        if (!this._iframe) {
             this._iframe = jsb.WebView.create();
             this._initEvent();
             this._initExtraSetting();
@@ -159,6 +159,22 @@
             iframe.reload();
         }
     };
+
+    _p.getUserAgent = function () {
+        let iframe = this._iframe;
+        if (iframe) {
+            return iframe.getUserAgent();
+        }
+        return null;
+    };
+
+    _p.setUserAgent = function (agentStr) {
+        let iframe = this._iframe;
+        if (iframe) {
+            iframe.setUserAgent(agentStr);
+        }
+    }
+
     /**
      * Determine whether to go back
      */
