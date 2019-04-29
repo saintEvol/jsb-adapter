@@ -38,6 +38,7 @@
             // keep webview data
             this.jsCallback = null;
             this.interfaceSchema = null;
+            this.appendingUserAgent = null;
         }
     });
     var _impl = cc.WebView.Impl;
@@ -90,6 +91,7 @@
             this._iframe = jsb.WebView.create();
             this._initEvent();
             this._initExtraSetting();
+            this.appendUserAgent();
         }
     };
     _p.removeDom = function () {
@@ -172,6 +174,26 @@
         let iframe = this._iframe;
         if (iframe) {
             iframe.setUserAgent(agentStr);
+        }
+    };
+
+    _p.appendUserAgent = function(str){
+        if(!str) str = "";
+
+        if(this.appendingUserAgent){
+            this.appendUserAgent += str;
+        }
+        else{
+            this.appendingUserAgent = str;
+        }
+
+        let iframe = this._iframe;
+        if(iframe){
+            let ua = this.getUserAgent() || "";
+            ua += this.appendingUserAgent;
+            this.setUserAgent(ua);
+
+            this.appendingUserAgent = null;
         }
     }
 
