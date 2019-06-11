@@ -404,11 +404,11 @@
     });
 
     armatureDisplayProto._clearRenderData = function () {
-        this._renderInfoOffset = undefined;
-        this._nativeDisplay = undefined;
+        this._renderInfoOffset = null;
+        this._nativeDisplay = null;
     };
 
-    armatureDisplayProto.update = undefined;
+    armatureDisplayProto.update = null;
 
     // Shield use batch in native
     armatureDisplayProto._updateBatch = function () {}
@@ -417,6 +417,12 @@
         if (!this.dragonAsset || !this.dragonAtlasAsset || !this.armatureName) {
             this._clearRenderData();
             return;
+        }
+
+        if (this._nativeDisplay) {
+            this._nativeDisplay.dispose();
+            this._nativeDisplay._comp = null;
+            this._nativeDisplay = null;
         }
 
         let atlasUUID = this.dragonAtlasAsset._uuid;
@@ -429,9 +435,23 @@
 
         this._nativeDisplay._ccNode = this.node;
         this._nativeDisplay._comp = this;
+        this._nativeDisplay._eventTarget = this._eventTarget;
 
         this._nativeDisplay.setOpacityModifyRGB(this.premultipliedAlpha);
         this._nativeDisplay.setDebugBonesEnabled(this.debugBones);
+        this._nativeDisplay.setDBEventCallback(function(eventObject) {
+            this._eventTarget.emit(eventObject.type, eventObject);
+        });
+
+        // add all event into native display
+        let callbackTable = this._eventTarget._callbackTable;
+        // just use to adapt to native api
+        let emptyHandle = function () {};
+        for (let key in callbackTable) {
+            let list = callbackTable[key];
+            if (!list || !list.callbacks || !list.callbacks.length) continue;
+            this._nativeDisplay.addDBEventListener(key, emptyHandle);
+        }
 
         this._armature = this._nativeDisplay.armature();
         this._armature.animation.timeScale = this.timeScale;
@@ -474,20 +494,23 @@
 
     armatureDisplayProto.once = function (eventType, listener, target) {
         if (this._nativeDisplay) {
-            this._nativeDisplay.once(eventType, listener, target);
+            this._nativeDisplay.addDBEventListener(eventType, listener);
         }
+        this._eventTarget.once(eventType, listener, target);
     };
 
     armatureDisplayProto.addEventListener = function (eventType, listener, target) {
         if (this._nativeDisplay) {
-            this._nativeDisplay.on(eventType, listener, target);
+            this._nativeDisplay.addDBEventListener(eventType, listener);
         }
+        this._eventTarget.on(eventType, listener, target);
     };
 
     armatureDisplayProto.removeEventListener = function (eventType, listener, target) {
         if (this._nativeDisplay) {
-            this._nativeDisplay.off(eventType, listener, target);
+            this._nativeDisplay.removeDBEventListener(eventType, listener);
         }
+        this._eventTarget.off(eventType, listener, target);
     };
 
     let _onDestroy = armatureDisplayProto.onDestroy;
@@ -495,10 +518,10 @@
         _onDestroy.call(this);
         if (this._nativeDisplay) {
             this._nativeDisplay.dispose();
-            this._nativeDisplay._comp = undefined;
-            this._nativeDisplay = undefined;
+            this._nativeDisplay._comp = null;
+            this._nativeDisplay = null;
         }
-        this._materialCache = undefined;
+        this._materialCache = null;
     };
 
     ////////////////////////////////////////////////////////////
@@ -566,6 +589,9 @@
             return;
         }
 
+        let renderInfoOffset = comp._renderInfoOffset;
+        if (!renderInfoOffset) return;
+
         let node = comp.node;
         let iaPool = comp._iaPool;
         let poolIdx = 0;
@@ -576,18 +602,23 @@
             comp.__preColor__ = node.color;
         }
 
-        let infoOffset = comp._renderInfoOffset[0];
+        let infoOffset = renderInfoOffset[0];
         let renderInfoMgr = middleware.renderInfoMgr;
         let renderInfo = renderInfoMgr.renderInfo;
 
         let materialIdx = 0,realTextureIndex,realTexture;
+        // verify render border
+        let border = renderInfo[infoOffset + materialIdx++];
+        if (border !== 0xffffffff) return;
+
         let matLen = renderInfo[infoOffset + materialIdx++];
         if (matLen == 0) return;
 
         for (let index = 0; index < matLen; index++) {
             realTextureIndex = renderInfo[infoOffset + materialIdx++];
             realTexture = comp.dragonAtlasAsset.getTextureByIndex(realTextureIndex);
-            
+            if (!realTexture) return;
+
             let material = _getSlotMaterial(comp, realTexture,
                 renderInfo[infoOffset + materialIdx++],
                 renderInfo[infoOffset + materialIdx++]);

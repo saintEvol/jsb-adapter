@@ -2,6 +2,11 @@ const HTMLElement = require('./HTMLElement');
 const ImageData = require('./ImageData');
 const DOMRect = require('./DOMRect');
 
+let clamp = function (value) {
+    value = Math.round(value);
+    return value < 0 ? 0 : value < 255 ? value : 255;
+};
+
 class CanvasGradient {
     constructor() {
         console.log("==> CanvasGradient constructor");
@@ -36,6 +41,8 @@ class HTMLCanvasElement extends HTMLElement {
         this._context2D = null;
         this._data = null;
         this._alignment = 4; // Canvas is used for rendering text only and we make sure the data format is RGBA.
+        // Whether the pixel data is premultiplied, the data returned from the native platform is all premultiplied.
+        this._premultiplied = false;
     }
 
     //REFINE: implement opts.
@@ -55,6 +62,7 @@ class HTMLCanvasElement extends HTMLElement {
                 this._context2D._setCanvasBufferUpdatedCallback(function (data) {
                     // FIXME: Canvas's data will take 2x memory size, one in C++, another is obtained by Uint8Array here.
                     self._data = new ImageData(data, self._width, self._height);
+                    self._premultiplied = true;
                     // If the width of canvas could be divided by 2, it means that the bytes per row could be divided by 8.
                     self._alignment = self._width % 2 === 0 ? 8 : 4;
                 });
@@ -101,8 +109,33 @@ class HTMLCanvasElement extends HTMLElement {
         return this._height;
     }
 
+    get data() {
+        if (this._data) {
+            if (this._premultiplied) {
+                this._premultiplied = false;
+                this.unpremultAlpha();
+            }
+            return this._data.data;
+        } 
+        return null;
+    }
+
     getBoundingClientRect() {
         return new DOMRect(0, 0, this._width, this._height);
+    }
+
+    // Because the blend factor is modified to SRC_ALPHA, here must perform unpremult alpha.
+    unpremultAlpha() {
+        var data = this._data.data;
+        var alpha;
+        for (let i = 0, len = data.length; i < len; i += 4) {
+            alpha = data[i + 3];
+            if (alpha > 0 && alpha < 255) {
+                data[i + 0] = clamp(data[i + 0] / alpha * 255);
+                data[i + 1] = clamp(data[i + 1] / alpha * 255);
+                data[i + 2] = clamp(data[i + 2] / alpha * 255);
+            }           
+        }
     }
 }
 
