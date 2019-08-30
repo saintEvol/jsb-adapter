@@ -324,7 +324,7 @@
         if (this.dragonBonesJson) {
             filePath = this.dragonBonesJson;
         } else {
-            filePath = cc.loader.md5Pipe ? cc.loader.md5Pipe.transformURL(this.nativeUrl, true) : this.nativeUrl;
+            filePath = cc.loader.md5Pipe ? cc.loader.md5Pipe.transformURL(this.nativeUrl) : this.nativeUrl;
         }
         this._factory.parseDragonBonesDataByPath(filePath, armatureKey);
         return armatureKey;
@@ -342,10 +342,7 @@
     let armatureDisplayProto = dragonBones.ArmatureDisplay.prototype;
     let assembler = dragonBones.ArmatureDisplay._assembler;
     let renderCompProto = cc.RenderComponent.prototype;
-    let RenderFlow = cc.RenderFlow;
-    let renderer = cc.renderer;
-    let renderEngine = renderer.renderEngine;
-    let gfx = renderEngine.gfx;
+    let gfx = cc.gfx;
     let VertexFormat = gfx.VertexFormat;
 
     Object.defineProperty(armatureDisplayProto, 'armatureName', {
@@ -463,14 +460,37 @@
         }
     };
 
+    armatureDisplayProto._activateMaterial = function () {
+        let texture = this.dragonAtlasAsset && this.dragonAtlasAsset.texture;
+        if (!texture) {
+            this.disableRender();
+            return;
+        }
+
+        // Get material
+        let material = this.sharedMaterials[0];
+        if (!material) {
+            material = cc.Material.getInstantiatedBuiltinMaterial('sprite', this);
+            material.define('_USE_MODEL', true);
+            material.define('USE_TEXTURE', true);
+        } else {
+            material = cc.Material.getInstantiatedMaterial(material, this);
+        }
+
+        material.setProperty('texture', texture);
+        this.sharedMaterials[0] = material;
+
+        this.markForUpdateRenderData(false);
+        this.markForRender(false);
+        this.markForCustomIARender(true);
+    };
+    
     armatureDisplayProto.onEnable = function () {
         renderCompProto.onEnable.call(this);
         if (this._armature) {
             this._factory.add(this._armature);
         }
-        this.node._renderFlag &= ~RenderFlow.FLAG_UPDATE_RENDER_DATA;
-        this.node._renderFlag &= ~RenderFlow.FLAG_RENDER;
-        this.node._renderFlag |= RenderFlow.FLAG_CUSTOM_IA_RENDER;
+        this._activateMaterial();
     };
 
     armatureDisplayProto.onDisable = function () {
@@ -488,8 +508,7 @@
 
         this._iaPool = [];
         this._iaPool.push(new middleware.MiddlewareIA());
-        
-        this._iaRenderData = new renderEngine.IARenderData();
+        this._iaRenderData = new cc.IARenderData();
     };
 
     armatureDisplayProto.once = function (eventType, listener, target) {
@@ -533,40 +552,36 @@
 
     let _getSlotMaterial = function (comp, tex, src, dst) {
         let key = tex.url + src + dst;
-        let baseMaterial = comp._material;
+        let baseMaterial = comp.sharedMaterials[0];
         if (!baseMaterial) return null;
 
         let materialCache = comp._materialCache;
         let material = materialCache[key];
         
         if (!material) {
+            material = new cc.Material();
+            material.copy(baseMaterial);
 
-            let baseKey = baseMaterial._hash;
-            if (!materialCache[baseKey]) {
-                material = baseMaterial;
-            } else {
-                material = baseMaterial.clone();
-            }
-
-            material.useModel = true;
-            // update texture
-            material.texture = tex;
-            material.useColor = false;
-
+            material.define('_USE_MODEL', true);
+            material.setProperty('texture', tex);
+    
             // update blend function
-            let pass = material._mainTech.passes[0];
+            let pass = material.effect.getDefaultTechnique().passes[0];
+
             pass.setBlend(
+                true,
                 gfx.BLEND_FUNC_ADD,
                 src, dst,
                 gfx.BLEND_FUNC_ADD,
                 src, dst
             );
+            material.updateHash(key);
             materialCache[key] = material;
-            material.updateHash(key);
         }
-        else if (material.texture !== tex) {
-            material.texture = tex;
+        else if (material.getProperty('texture') !== tex) {
+            material.setProperty('texture', tex);
             material.updateHash(key);
+            materialCache[key] = material;
         }
         return material;
     };
@@ -634,7 +649,8 @@
                 iaPool[poolIdx] = ia;
             }
             ia._start = indiceOffset;
-            ia._count = segmentCount;
+
+            ia.count = segmentCount;
             ia.setVertexFormat(VertexFormat.XY_UV_Color);
             ia.setGLIBID(glIB);
             ia.setGLVBID(glVB);

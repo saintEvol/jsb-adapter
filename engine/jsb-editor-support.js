@@ -25,9 +25,7 @@
 (function(){
     if (window.middleware === undefined) return;
 
-    let renderEngine = cc.renderer.renderEngine;
-    let gfx = renderEngine.gfx;
-
+    var gfx = cc.gfx;
     let middlewareMgr = middleware.MiddlewareManager.getInstance();
     let director = cc.director;
 
@@ -56,11 +54,7 @@
             };
             this._primitiveType = gfx.PT_TRIANGLES;
             this._start = 0;
-            this._count = -1;
-        },
-
-        getPrimitiveCount () {
-            return this._count;
+            this.count = -1;
         },
 
         setVertexFormat (format) {
