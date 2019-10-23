@@ -240,6 +240,12 @@
         this._iaRenderData = new cc.IARenderData();
     };
 
+    let _setMaterial = skeleton.setMaterial;
+    skeleton.setMaterial = function (index, material) {
+        _setMaterial.call(this, index, material);
+        material.define('_USE_MODEL', true);
+    };
+
     // Shield use batch in native
     skeleton._updateBatch = function () {};
 
@@ -275,7 +281,8 @@
         this._skeleton.setTimeScale(this.timeScale);
 
         this._renderInfoOffset = this._skeleton.getRenderInfoOffset();
-
+        this._renderInfoOffset[0] = 0;
+        
         // init skeleton listener
         this._startListener && this.setStartListener(this._startListener);
         this._endListener && this.setEndListener(this._endListener);
@@ -294,15 +301,13 @@
     skeleton._activateMaterial = function () {
         let material = this.sharedMaterials[0];
         if (!material) {
-            material = cc.Material.getInstantiatedBuiltinMaterial('spine', this);
-            material.define('_USE_MODEL', true);
-        }
-        else {
+            material = cc.Material.getInstantiatedBuiltinMaterial('2d-spine', this);
+        } else {
             material = cc.Material.getInstantiatedMaterial(material, this);
         }
 
-        this.sharedMaterials[0] = material;
-
+        material.define('_USE_MODEL', true);
+        this.setMaterial(0, material);
         this.markForUpdateRenderData(false);
         this.markForRender(false);
         this.markForCustomIARender(true);
@@ -314,6 +319,9 @@
             this._skeleton.onEnable();
         }
         this._activateMaterial();
+        if (this._renderInfoOffset) {
+            this._renderInfoOffset[0] = 0;
+        }
     };
 
     skeleton.onDisable = function () {
@@ -323,7 +331,23 @@
         }
     };
 
-    skeleton.update = undefined;
+    skeleton.update = null;
+
+    skeleton.lateUpdate = function () {
+        if (!this._skeleton) return;
+        let nodeColor = this.node._color;
+        let opacity = this.node._opacity;
+        this.__preColor__ = this.__preColor__ || new cc.Color(255, 255, 255, 255);
+        let preColor = this.__preColor__;
+
+        let colorVal = nodeColor._val;
+        nodeColor._fastSetA(opacity);
+        if (!preColor || !nodeColor.equals(preColor)) {
+            this._skeleton.setColor(nodeColor);
+            preColor.set(nodeColor);
+        }
+        nodeColor._val = colorVal;
+    };
 
     skeleton.updateWorldTransform = function () {
         this._skeleton && this._skeleton.updateWorldTransform();
@@ -513,6 +537,12 @@
             this.setSkeletonData(this.skeletonData);
             this.defaultSkin && this._skeleton.setSkin(this.defaultSkin);
             this.animation = this.defaultAnimation;
+        } else {
+            if (this._skeleton) {
+                this._skeleton.stopSchedule();
+                this._skeleton._comp = null;
+                this._skeleton = null;
+            }
         }
     };
 

@@ -45,8 +45,13 @@
         let material = materialCache[key];
 
         if (!material) {
-            material = new cc.Material();
-            material.copy(baseMaterial);
+            let baseKey = baseMaterial._hash;
+            if (!materialCache[baseKey]) {
+                material = baseMaterial;
+            } else {
+                material = new cc.Material();
+                material.copy(baseMaterial);
+            }
 
             material.define('_USE_MODEL', true);
             material.define('USE_TINT', comp.useTint);
@@ -91,15 +96,12 @@
         let renderInfoOffset = comp._renderInfoOffset;
         if (!renderInfoOffset) return;
 
-        if (comp.__preColor__ === undefined || !node.color.equals(comp.__preColor__)) {
-            nativeSkeleton.setColor(node.color);
-            comp.__preColor__ = node.color;
-        }
-
         let iaPool = comp._iaPool;
         let poolIdx = 0;
 
         let infoOffset = renderInfoOffset[0];
+        renderInfoOffset[0] = 0;
+        
         let renderInfoMgr = middleware.renderInfoMgr;
         let renderInfo = renderInfoMgr.renderInfo;
 
